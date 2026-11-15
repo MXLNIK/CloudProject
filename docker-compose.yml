@@ -1,0 +1,89 @@
+services:
+
+  nginx:
+    build: ./nginx
+    ports:
+      - "8080:80"
+    networks: [frontend]
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    build: ./app
+    environment:
+      DATABASE_URL: postgresql://cloudproject:cloudproject@postgres:5432/cloudproject
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "5000:5000"
+    networks: [frontend, backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build: ./app
+    command: python worker.py
+    environment:
+      DATABASE_URL: postgresql://cloudproject:cloudproject@postgres:5432/cloudproject
+      REDIS_URL: redis://redis:6379/0
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cloudproject
+      POSTGRES_PASSWORD: cloudproject
+      POSTGRES_DB: cloudproject
+      TZ: Europe/Moscow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudproject -d cloudproject"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@cloudproject.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks: [backend, frontend]
+
+volumes:
+  pgdata:
+  pgadmin_data:
+
+networks:
+  frontend:
+  backend:
+    internal: true

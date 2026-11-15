@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — CloudProject{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Проекты</a></li>
+        <li class="breadcrumb-item active">{{ project.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="h3 mb-1">{{ project.name }}</h1>
+        <p class="text-muted small mb-0">{{ project.description or 'Без описания' }}</p>
+    </div>
+    <div class="text-end text-muted small">
+        Создан: {{ project.created_at.strftime('%d.%m.%Y %H:%M') }}<br>
+        № проекта: {{ project.id }}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap gap-3 align-items-center">
+        <div class="fw-bold">Статистика задач: {{ stats.total }}</div>
+        {% for status, count in stats.counts.items() %}
+        <span class="badge text-bg-{{ status_colors[status] }}">{{ status }}: {{ count }}</span>
+        {% endfor %}
+        <div class="ms-auto small text-end">
+            {% if stats.from_cache %}
+                <span class="badge text-bg-success">из кэша Redis</span>
+                <div class="text-muted">обновлено воркером: {{ stats.updated_at }}</div>
+            {% else %}
+                <span class="badge text-bg-secondary">посчитано из БД (кэш пуст)</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header fw-bold">Новая задача</div>
+            <div class="card-body">
+                <form method="post" action="/project/{{ project.id }}/task/add">
+                    <div class="mb-3">
+                        <input name="title" class="form-control" placeholder="Что нужно сделать"
+                               required maxlength="200" autocomplete="off">
+                    </div>
+                    <button class="btn btn-primary w-100">Добавить задачу</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        {% if tasks %}
+        <div class="card shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">№</th>
+                            <th>Задача</th>
+                            <th>Статус</th>
+                            <th>Исполнитель</th>
+                            <th>Создана</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in tasks %}
+                        <tr>
+                            <td class="ps-3 text-muted">{{ loop.index }}</td>
+                            <td class="fw-semibold">
+                                {{ t.title }}
+                                <span class="badge text-bg-{{ status_colors[t.status] }} ms-2">{{ t.status }}</span>
+                            </td>
+                            <td>
+                                <form method="post" action="/task/{{ t.id }}/status" class="d-flex gap-1">
+                                    <select name="status" class="form-select form-select-sm w-auto">
+                                        {% for s in statuses %}
+                                        <option value="{{ s }}" {% if t.status == s %}selected{% endif %}>{{ s }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="btn btn-sm btn-outline-primary" title="Обновить статус">OK</button>
+                                </form>
+                            </td>
+                            <td>
+                                <form method="post" action="/task/{{ t.id }}/assign" class="d-flex gap-1">
+                                    <select name="assignee_id" class="form-select form-select-sm w-auto">
+                                        <option value="">— не назначен —</option>
+                                        {% for e in employees %}
+                                        <option value="{{ e.id }}" {% if t.assignee_id == e.id %}selected{% endif %}>
+                                            {{ e.full_name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="btn btn-sm btn-outline-primary" title="Назначить исполнителя">OK</button>
+                                </form>
+                            </td>
+                            <td class="small text-muted pe-3">{{ t.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="card shadow-sm text-center py-5 text-muted">
+            В проекте пока нет задач. Добавьте первую задачу в форме слева.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,112 @@
+name: "CI/CD CloudProject"
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  APP_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/cloudproject
+  NGINX_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/cloudproject-nginx
+
+jobs:
+  # Шаг 1. Автотесты
+  tests:
+    name: "Автотесты (pytest + PostgreSQL + Redis)"
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cloudproject
+          POSTGRES_PASSWORD: cloudproject
+          POSTGRES_DB: cloudproject
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cloudproject"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://cloudproject:cloudproject@localhost:5432/cloudproject
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - name: "Получить исходный код"
+        uses: actions/checkout@v4
+      - name: "Установить Python 3.12"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: "Установить зависимости"
+        run: pip install -r app/requirements.txt pytest
+      - name: "Запустить автотесты"
+        run: pytest tests -v
+
+  # Шаг 2. Сборка Docker-образов и публикация в Docker Hub
+  build-and-push:
+    name: "Сборка образов и публикация в Docker Hub"
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Получить исходный код"
+        uses: actions/checkout@v4
+      - name: "Вход в Docker Hub"
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: "Подготовить Buildx и кеш сборки"
+        uses: docker/setup-buildx-action@v3
+      - name: "Собрать и опубликовать образ приложения"
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app
+          push: true
+          tags: |
+            ${{ env.APP_IMAGE }}:latest
+            ${{ env.APP_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: "Собрать и опубликовать образ nginx"
+        uses: docker/build-push-action@v6
+        with:
+          context: ./nginx
+          push: true
+          tags: |
+            ${{ env.NGINX_IMAGE }}:latest
+            ${{ env.NGINX_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Шаг 3. Деплой: SSH на Windows-машину с кластером Swarm
+  deploy:
+    name: "Деплой в Docker Swarm (SSH на машину с кластером)"
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Подготовить приватный SSH-ключ"
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/cloudproject_key
+          chmod 600 ~/.ssh/cloudproject_key
+      - name: "Обновить сервисы Swarm на целевой машине"
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          PROJECT_DIR: ${{ secrets.SERVER_PROJECT_DIR }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          ssh -i ~/.ssh/cloudproject_key \
+              -o StrictHostKeyChecking=no \
+              "$SERVER_USER@$SERVER_HOST" \
+              "$PROJECT_DIR\\scripts\\update.bat $DOCKERHUB_USERNAME"

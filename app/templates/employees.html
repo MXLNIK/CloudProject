@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Сотрудники — CloudProject{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Сотрудники</h1>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header fw-bold">Новый сотрудник</div>
+            <div class="card-body">
+                <form method="post" action="/employees/add">
+                    <div class="mb-2">
+                        <input name="full_name" class="form-control" placeholder="Фамилия и имя"
+                               required maxlength="100" autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <input name="position" class="form-control" placeholder="Должность"
+                               maxlength="100" autocomplete="off">
+                    </div>
+                    <button class="btn btn-primary w-100">Добавить сотрудника</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        {% if employees %}
+        <div class="card shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">№</th>
+                            <th>Фамилия и имя</th>
+                            <th>Должность</th>
+                            <th class="text-center pe-3">Задач назначено</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in employees %}
+                        <tr>
+                            <td class="ps-3 text-muted">{{ loop.index }}</td>
+                            <td class="fw-semibold">{{ e.full_name }}</td>
+                            <td class="text-muted">{{ e.position }}</td>
+                            <td class="text-center pe-3">
+                                <span class="badge text-bg-dark">{{ e.task_count }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="card shadow-sm text-center py-5 text-muted">
+            Список сотрудников пуст. Добавьте первого сотрудника в форме слева.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

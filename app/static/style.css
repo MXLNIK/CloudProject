@@ -1,0 +1,7 @@
+.table td {
+    vertical-align: middle;
+}
+
+form.d-flex {
+    white-space: nowrap;
+}
